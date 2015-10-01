@@ -28,8 +28,7 @@ class ProcessQueue(object):
         elif self.queueType=="SRT":
            self.process_queue.put((burst_time, p))
 
-    # @TODO preempted when a process completes I/O !!
-    def preempt(self, kickoffProcess_burst_time, kickoffProcess):
+    def preempt2queue(self, kickoffProcess_burst_time, kickoffProcess):
         if self.queueType=="SRT":
             self.process_queue.put((kickoffProcess_burst_time, kickoffProcess))
         else:
@@ -90,9 +89,17 @@ class Simulator(object):
         event = [time, True, callback, args]
         return event
    
-    def cancel(self):
-       #@TODO
-        print "Dummy simulator cancel"
+    def cancel(self, schedule_time, processID):
+        #pdb.set_trace()
+        for index, ele in enumerate(self.queue):
+            #ele = [time, True, callback, args] 
+            #args= [process, some other parameters]
+            if ele[0] == schedule_time * self.maxID + (processID - 1) and ele[3][0].ID == processID:
+                logging.info("Find P%d in queue" % processID)
+                #replace canceled event with the last element, remove the last element then re-heapify the heap
+                self.queue[index] = self.queue[-1]
+                self.queue.pop()
+                heapq.heapify(self.queue)
  
     def halt(self):
         self.terminated = True
@@ -137,13 +144,18 @@ class ProcessInfo():
        self.num_burst = num_burst_val 
        self.io_time = io_time_val 
        self.lastTimeInCPU = None 
+       self.remain_burst_time = burst_time_val
+
+    def resetRemainBurstTime(self):
+        self.remain_burst_time = self.burst_time
 
     def setInCPUTime(self, time):
         self.lastTimeInCPU = time 
-
-    def remainBurstTime(self, time):
+    
+    def setOutCPUTime(self, time):
         if(self.lastTimeInCPU):
-            return self.burst_time - (time - self.lastTimeInCPU)     
+            self.remain_burst_time -= (time - self.lastTimeInCPU)   
+            return time - self.lastTimeInCPU 
         else:
             raise Exception("Process not ever in CPU") 
 
@@ -164,6 +176,10 @@ class CPU():
         self.active_n = 0
         self.maxID = 1 
         self.processInCPU = None #Note: processInCPU is the process in use of CPU, NOT in content switch
+ 
+        self.burstTimeSum = 0
+        self.turnaroundTimeSum = 0
+        self.contentSwitchSum = 0
  
     def printQueue(self):
         self.process_queue.printQueue()
@@ -197,12 +213,16 @@ class CPU():
         sys.stdout.write('')
         self.printQueue()
         print "]"
+        logging.info("***Test: the remaining time for P%d: %d" % (process.ID, process.remain_burst_time))
         self.CPUIdle = False
-        self.processInCPU = process
+        self.processInCPU = process   # A process AFTER content switching is really treated as a process in the CPU
         process.setInCPUTime(simulator.time)
         simulator.schedule(simulator.time + burst_time, self.eCPUBurst, process, simulator) 
+        self.contentSwitchSum += 1
 
     def eCPUBurst(self, process, simulator):
+        self.burstTimeSum += process.setOutCPUTime(simulator.time)
+
         process.num_burst -= 1 
         if process.num_burst > 0:
             #time 181ms: P1 completed its CPU burst
@@ -217,16 +237,14 @@ class CPU():
             print "]"
             simulator.schedule(simulator.time + process.io_time, self.eIOBurst, process, simulator) 
         else:
-            #time 579ms: P2 terminated
             print "time %dms:"% simulator.time,"P%d"%process.ID, "terminated [Q",
             sys.stdout.write('')
             self.printQueue()
             print "]"
+            self.turnaroundTimeSum += simulator.time
             self.active_n -= 1
             if(self.active_n == 0):
-                print "time %dms: Simulator ended" % simulator.time
-        logging.info("Test: %d", self.processInCPU.remainBurstTime(simulator.time))
-        #pdb.set_trace()
+                print "time %dms: Simulator for %s ended" %( simulator.time, self.queueType)
         self.processInCPU = None #Note: process in cpu is in use of CPU, NOT in content switch
         if(not self.process_queue.isEmpty()):
             next_burst_time, next_process = self.process_queue.nextProcess() 
@@ -236,27 +254,53 @@ class CPU():
             self.CPUIdle = True
     
     def eIOBurst(self, process, simulator):
+        #if simulator.time == 1625:
+        #     pdb.set_trace()
+
         if process.num_burst == 0:
             return
 
-        if self.processInCPU and self.queueType=="SRT" and self.processInCPU.remainBurstTime(simulator.time) > process.burst_time :
-                logging.info("***Test: Remaining Time of %d: %d", self.processInCPU.ID, self.processInCPU.remainBurstTime(simulator.time), "while burst time of %d:%d ", process.ID, process.burst_time)
-                #Preempt. Note process skip the queue and use CPU immediately
+        process.resetRemainBurstTime()
 
-                #Kick off the process in CPU from queue
-                self.process_queue.preempt(self.processInCPU.remainBurstTime(simulator.time), self.processInCPU) 
-                #And cancel the CPU burst of this process:
-                simulator.cancel()
-                next_burst_time, next_process = process.burst_time, process
-                simulator.schedule(simulator.time + self.t_cs, self.eContentSwitch, next_process, next_burst_time, simulator) 
+        if self.processInCPU and self.queueType=="SRT" and self.processInCPU.remain_burst_time - (simulator.time - self.processInCPU.lastTimeInCPU) > process.burst_time : 
+             print "time %dms:"% simulator.time,"P%d"% process.ID, "completed I/O [Q",
+             sys.stdout.write('')
+             self.printQueue()
+             print "]"
+
+        #PREEMPT CASE
+
+             print "time %dms:"% simulator.time,"P%d"% self.processInCPU.ID, "preempted by P%d [Q" % process.ID ,
+             sys.stdout.write('')
+             self.printQueue()
+             print "]"
+
+             #Preempt. 
+             self.burstTimeSum += self.processInCPU.setOutCPUTime(simulator.time)
+             logging.info("***Test: Remaining Time of P%d: %d while burst time of P%d:%d "%( self.processInCPU.ID, self.processInCPU.remain_burst_time, process.ID, process.burst_time))
+             #Kick off the process in CPU and insert into queue
+             #pdb.set_trace()
+             if self.processInCPU.remain_burst_time <= 0: raise Exception("Bug: Kicked off at the moment of CPU Burst")
+             #cancel the CPU burst of this process:
+             simulator.cancel(self.processInCPU.remain_burst_time + simulator.time, self.processInCPU.ID)
+             self.process_queue.preempt2queue(self.processInCPU.remain_burst_time, self.processInCPU) 
+             self.processInCPU = None
+
+#@TODO impo r question! how about a process in content switching being preempted???
+
+             #process skip the queue and use CPU immediately
+             next_burst_time, next_process = process.burst_time, process
+             simulator.schedule(simulator.time + self.t_cs, self.eContentSwitch, next_process, next_burst_time, simulator) 
+             self.CPUIdle = False
         else:
+        # NORMAL CASE
              self.process_queue.appendProcess(process.burst_time, process)
+             print "time %dms:"% simulator.time,"P%d"% process.ID, "completed I/O [Q",
+             sys.stdout.write('')
+             self.printQueue()
+             print "]"
 
-        print "time %dms:"% simulator.time,"P%d"% process.ID, "completed I/O [Q",
-        sys.stdout.write('')
-        self.printQueue()
-        print "]"
-
+ 
         if self.CPUIdle :
         # it means 1.queue empty 2.current process has more rounds 
             next_burst_time, next_process = self.process_queue.nextProcess() 
@@ -270,8 +314,9 @@ if(__name__=="__main__"):
         infile = str(sys.argv[1]) 
     with open(infile) as f:
         f = f.readlines()
-    cpu = CPU(queuetype="FCFS") 
-    
+
+    cpu = CPU(queuetype=sys.argv[2])
+
     for line in f:
         if(line.strip() and line[0]=='#'):
             continue 
@@ -281,5 +326,10 @@ if(__name__=="__main__"):
             continue
         else:
             cpu.addProcess(ProcessInfo(int(segments[0]),int(segments[1]),int(segments[2]),int(segments[3]))) 
-    cpu.run() 
+
+    cpu.run()
+    print cpu.burstTimeSum, cpu.turnaroundTimeSum, cpu.contentSwitchSum 
+
+
+
     
