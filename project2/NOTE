@@ -1,0 +1,8 @@
+Currently, the sample output has 
+time 1514ms: P2 preempted by P1 [Q 2 3]
+does not match my output
+
+And in sample output,
+the kick-off occurs even when priority is the same. 
+
+I will check this next Monday.

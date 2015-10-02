@@ -4,7 +4,6 @@ import pdb
 import sys
 import Queue as Q
 import logging
-logging.basicConfig(stream=sys.stderr, level=logging.CRITICAL)
 
 """
 NOTE: THIS PROGRAM IS DEVELOPED UNDER PYTHON 2.7

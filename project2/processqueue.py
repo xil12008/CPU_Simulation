@@ -4,7 +4,6 @@ import pdb
 import sys
 import Queue as Q
 import logging
-logging.basicConfig(stream=sys.stderr, level=logging.CRITICAL)
 
 """
 NOTE: THIS PROGRAM IS DEVELOPED UNDER PYTHON 2.7
@@ -74,5 +73,38 @@ class SRTQueue(ProcessQueue):
             tmp.append((burst_time, p))
         for ele in tmp:
             self.process_queue.put(ele)
+
+class PWAQueue(ProcessQueue): 
+    def __init__(self):
+        self.queueType = "PWA"
+	self.process_queue = [] 
+
+    def printType(self):
+        print self.queueType
+
+    def appendProcess(self, burst_time, p):
+        self.process_queue.append((burst_time, p)) 
+
+    def preempt2queue(self, kickoffProcess_burst_time, kickoffProcess):
+        self.process_queue.append((kickoffProcess_burst_time, kickoffProcess))
+
+    def nextProcess(self):
+	#Level from 0 - 5, 0 is the highest
+        for i in range(6):
+            for ele in self.process_queue:
+	        burst_time, p = ele[0], ele[1]
+		if p.priority == i:
+		     self.process_queue.remove(ele)
+                     return burst_time, p
+        return None
+
+    def isEmpty(self):
+	return len(self.process_queue)==0 
+ 
+    def printQueue(self):
+        for i in range(6):
+            for ele in self.process_queue:    #ele[0] is the burst time
+	        if ele[1].priority == i:
+                    sys.stdout.write(" %d" % ele[1].ID)
 
     

@@ -5,14 +5,14 @@ import pdb
 import sys
 import Queue as Q
 import logging
-logging.basicConfig(stream=sys.stderr, level=logging.CRITICAL)
+import random
 
 """
 NOTE: THIS PROGRAM IS DEVELOPED UNDER PYTHON 2.7
       In python 3.0, the notation for queue is different than ver. < 3.0
 """
 
-from processqueue import ProcessQueue, SRTQueue, FCFSQueue
+from processqueue import ProcessQueue, SRTQueue, FCFSQueue, PWAQueue
 from simulator import Simulator
 
 class CPU():
@@ -25,6 +25,8 @@ class CPU():
             self.process_queue = FCFSQueue() 
         elif queuetype == "SRT":
             self.process_queue = SRTQueue() 
+        elif queuetype == "PWA":
+            self.process_queue = PWAQueue() 
         self.queueType = queuetype
         self.CPUIdle = True
         self.n = 0
@@ -51,7 +53,10 @@ class CPU():
         for p in self.p_list:
             #p.printProcess()
             self.process_queue.appendProcess(p.burst_time, p)
-        #time 0ms: Simulator started [Q 1 2 4 3]
+	    if self.queueType == "PWA":
+	        p.currentAgingSeq = random.getrandbits(128)
+	        s.schedule( 0 + 3 * p.burst_time, self.eAging, p, p.currentAgingSeq , s) 
+
         print "time 0ms: Simulator started for %s [Q" % self.queueType,
         sys.stdout.write('') 
         self.printQueue()
@@ -61,14 +66,12 @@ class CPU():
         s.run()    
       
     #event occurs when it's done 
-    #def event(id, simulator, scheduled, rescheduled=None):
     def eContentSwitch(self, process, burst_time, simulator):
-        #time 13ms: P1 started using the CPU 
         print "time %dms:" % simulator.time,"P%d"% process.ID, "started using the CPU [Q",
         sys.stdout.write('')
         self.printQueue()
         print "]"
-        logging.info("***Test: the remaining time for P%d: %d" % (process.ID, process.remain_burst_time))
+        #logging.info("***Test: the remaining time for P%d: %d" % (process.ID, process.remain_burst_time))
         self.CPUIdle = False
         self.processInCPU = process   # A process AFTER content switching is really treated as a process in the CPU
         process.setInCPUTime(simulator.time)
@@ -77,6 +80,7 @@ class CPU():
 
     def eCPUBurst(self, process, simulator):
         self.burstTimeSum += process.setOutCPUTime(simulator.time)
+	process.currentAgingSeq = random.getrandbits(128)
 
         process.num_burst -= 1 
         if process.num_burst > 0:
@@ -113,18 +117,31 @@ class CPU():
             return
 
         process.resetRemainBurstTime()
+ 
 
         if self.processInCPU and self.queueType=="SRT" and self.processInCPU.remain_burst_time - (simulator.time - self.processInCPU.lastTimeInCPU) > process.burst_time : 
+	# Preempted by SRT
             self.SRTPreempt(process, simulator)
+	elif self.processInCPU and self.queueType=="PWA" and self.processInCPU.priority >= process.priority:
+	# Preempted by PWA
+	    process.currentAgingSeq = random.getrandbits(128)
+	    self.processInCPU.currentAgingSeq = random.getrandbits(128)
+	    self.PWAPreempt(process, simulator)
         else:
         # NORMAL CASE
-             self.process_queue.appendProcess(process.burst_time, process)
+            self.process_queue.appendProcess(process.burst_time, process)
 
-             print "time %dms:"% simulator.time,"P%d"% process.ID, "completed I/O [Q",
-             sys.stdout.write('')
-             self.printQueue()
-             print "]"
+	    #PWA with aging
+            if self.queueType=="PWA": 
+	        #The trick is: process after re-enter queue, the agingSeq is refreshed
+		#so that only if a process stay in queue for 3*burst time, the priority changes
+	        process.currentAgingSeq = random.getrandbits(128)
+	        simulator.schedule(simulator.time + 3 * process.burst_time, self.eAging,process, process.currentAgingSeq , simulator) 
 
+            print "time %dms:"% simulator.time,"P%d"% process.ID, "completed I/O [Q",
+            sys.stdout.write('')
+            self.printQueue()
+            print "]"
  
         if self.CPUIdle :
         # it means 1.queue empty 2.current process has more rounds 
@@ -133,7 +150,54 @@ class CPU():
             simulator.schedule(simulator.time + self.t_cs, self.eContentSwitch, next_process, next_burst_time, simulator) 
             self.CPUIdle = False
 
+    def eAging(self, process, agingSeq, simulator):
+	pdb.set_trace()
+        if process.currentAgingSeq == agingSeq and process.priority >0:
+            process.priority -= 1
+	    process.currentAgingSeq = random.getrandbits(128)
+	    simulator.schedule(simulator.time + 3 * process.burst_time, self.eAging,process, process.currentAgingSeq , simulator) 
+            logging.info("Aging :(Time=%d) Priority of P%d now is %d." %(simulator.time, process.ID , process.priority))
 
+    """
+        PWA Preempt
+    """
+    def PWAPreempt(self, process, simulator):
+
+        print "time %dms:"% simulator.time,"P%d"% process.ID, "completed I/O [Q",
+
+        sys.stdout.write('')
+        self.printQueue()
+        sys.stdout.write(' ?%d' % process.ID) #weird fake output to match project sample output
+        print "]"
+
+	#Preempt. 
+        self.burstTimeSum += self.processInCPU.setOutCPUTime(simulator.time)
+        logging.info("***Test: Priority of P%d is %d while priority of P%d is %d "%( self.processInCPU.ID, self.processInCPU.priority, process.ID, process.priority))
+        #Kick off the process in CPU and insert into queue
+        #pdb.set_trace()
+        if self.processInCPU.remain_burst_time <= 0: raise Exception("Bug: Kicked off at the moment of CPU Burst")
+        #cancel the CPU burst of this process:
+        simulator.cancel(self.processInCPU.remain_burst_time + simulator.time, self.processInCPU.ID)
+        self.process_queue.preempt2queue(self.processInCPU.remain_burst_time, self.processInCPU) 
+#@TODO important question! how about a process in content switching being preempted???
+
+        #PREEMPT CASE OF PWA 
+        print "time %dms:"% simulator.time,"P%d"% self.processInCPU.ID, "preempted by P%d [Q" % process.ID ,
+        sys.stdout.write('')
+        self.printQueue()
+        print "]"
+
+        self.processInCPU = None
+
+        #process skip the queue and use CPU immediately
+        next_burst_time, next_process = process.burst_time, process
+        simulator.schedule(simulator.time + self.t_cs, self.eContentSwitch, next_process, next_burst_time, simulator) 
+        self.CPUIdle = False
+
+
+    """
+        SRT Preempt
+    """
     def SRTPreempt(self, process, simulator):
         print "time %dms:"% simulator.time,"P%d"% process.ID, "completed I/O [Q",
         sys.stdout.write('')
@@ -157,7 +221,6 @@ class CPU():
         sys.stdout.write('')
         self.printQueue()
         print "]"
-
 
         self.processInCPU = None
 

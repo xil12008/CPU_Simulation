@@ -4,7 +4,7 @@ import pdb
 import sys
 import Queue as Q
 import logging
-logging.basicConfig(stream=sys.stderr, level=logging.CRITICAL)
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
 from CPU import CPU
 from processqueue import ProcessQueue 
@@ -38,7 +38,7 @@ if(__name__=="__main__"):
                                  int(segments[3]),\
 				 int(segments[4])))
 
-    queueTypeList = ['FCFS', 'SRT']
+    queueTypeList = ['FCFS', 'SRT', 'PWA']
   
     burst_num = 0
     for ptuple in processList:
