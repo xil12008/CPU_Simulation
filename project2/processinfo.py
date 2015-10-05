@@ -24,6 +24,7 @@ class ProcessInfo():
        self.num_burst = num_burst_val 
        self.io_time = io_time_val 
        self.lastTimeInCPU = None 
+       self.lastTimeInQueue = None 
        self.remain_burst_time = burst_time_val
        self.priority = priority_val
 
@@ -34,11 +35,20 @@ class ProcessInfo():
         self.lastTimeInCPU = time 
     
     def setOutCPUTime(self, time):
-        if(self.lastTimeInCPU):
+        if(self.lastTimeInCPU != None):
             self.remain_burst_time -= (time - self.lastTimeInCPU)   
             return time - self.lastTimeInCPU 
         else:
-            raise Exception("Process not ever in CPU") 
+            raise Exception("Process not ever in CPU")  
+
+    def setInQueueTime(self, time):
+        self.lastTimeInQueue = time
+
+    def setOutQueueTime(self, time):
+        if self.lastTimeInQueue != None:
+	    return time - self.lastTimeInQueue
+        else:
+            raise Exception("lastTimeInQueue is None")  
 
     def printProcess(self):
         print self.ID, self.burst_time, self.num_burst, self.io_time

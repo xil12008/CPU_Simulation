@@ -4,7 +4,7 @@ import pdb
 import sys
 import Queue as Q
 import logging
-logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+logging.basicConfig(stream=sys.stderr, level=logging.CRITICAL)
 
 from CPU import CPU
 from processqueue import ProcessQueue 
@@ -49,11 +49,11 @@ if(__name__=="__main__"):
         for ptuple in processList:
             cpu.addProcess(ProcessInfo(*ptuple)) 
         cpu.run()
-        print cpu.burstTimeSum, cpu.turnaroundTimeSum, cpu.contentSwitchSum 
+        print cpu.burstTimeSum, burst_num, cpu.waitTimeSum, cpu.waitTimeNum, cpu.turnaroundTimeSum, cpu.contentSwitchSum 
         with open("simout.txt", "a") as outfile:
             print "Algorithm %s", qtype
             print "-- average CPU burst time: %.2f ms" % (1.0 * cpu.burstTimeSum/burst_num) 
-            print "-- average wait time: None ms" 
+            print "-- average wait time: %.2f ms" %(1.0 * cpu.waitTimeSum/cpu.waitTimeNum) 
             print "-- average  turnaround time: %.2f ms" % (1.0 * cpu.turnaroundTimeSum/cpu.n)
             print "-- total number of context switches: %d" % cpu.contentSwitchSum 
 

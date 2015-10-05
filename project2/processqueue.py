@@ -85,6 +85,12 @@ class PWAQueue(ProcessQueue):
     def appendProcess(self, burst_time, p):
         self.process_queue.append((burst_time, p)) 
 
+    def deleteProcess(self, p_val):
+         for ele in self.process_queue:
+             p = ele[1]
+             if p.ID == p_val.ID:
+                 self.process_queue.remove(ele)
+         
     def preempt2queue(self, kickoffProcess_burst_time, kickoffProcess):
         self.process_queue.append((kickoffProcess_burst_time, kickoffProcess))
 
