@@ -162,8 +162,6 @@ class CPU():
         if self.CPUIdle :
         # it means 1.queue empty 2.current process has more rounds 
             next_burst_time, next_process = self.process_queue.nextProcess() 
-	    self.waitTimeSum += next_process.setOutQueueTime(simulator.time)
-            self.waitTimeNum += 1
 
             #Schedule directly
             simulator.schedule(simulator.time + self.t_cs, self.eContentSwitch, next_process, next_burst_time, simulator) 
@@ -184,16 +182,14 @@ class CPU():
 	        process.currentAgingSeq = random.getrandbits(128)
 	        self.processInCPU.currentAgingSeq = random.getrandbits(128)
 		self.process_queue.deleteProcess(process)
+		self.waitTimeSum += process.setOutQueueTime(simulator.time)
+		self.waitTimeNum += 1
 	        self.PWAPreempt(process, simulator)
 
     """
         PWA Preempt
     """
     def PWAPreempt(self, process, simulator):
-
-	self.processInCPU.setInQueueTime(simulator.time)
-	self.waitTimeSum += process.setOutQueueTime(simulator.time) 
-	self.waitTimeNum += 1
 
 	#Preempt. 
         self.burstTimeSum += self.processInCPU.setOutCPUTime(simulator.time)
@@ -204,8 +200,9 @@ class CPU():
         #cancel the CPU burst of this process:
         simulator.cancel(self.processInCPU.remain_burst_time + simulator.time, self.processInCPU.ID)
 
-
+	self.processInCPU.setInQueueTime(simulator.time)
         self.process_queue.preempt2queue(self.processInCPU.remain_burst_time, self.processInCPU) 
+
 #@TODO important question! how about a process in content switching being preempted???
 
         #PREEMPT CASE OF PWA 
@@ -227,9 +224,6 @@ class CPU():
     """
     def SRTPreempt(self, process, simulator):
 
-	self.processInCPU.setInQueueTime(simulator.time)
-	self.waitTimeSum += process.setOutQueueTime(simulator.time) 
-	self.waitTimeNum += 1
 
         print "time %dms:"% simulator.time,"P%d"% process.ID, "completed I/O [Q",
         sys.stdout.write('')
@@ -244,6 +238,7 @@ class CPU():
         if self.processInCPU.remain_burst_time <= 0: raise Exception("Bug: Kicked off at the moment of CPU Burst")
         #cancel the CPU burst of this process:
         simulator.cancel(self.processInCPU.remain_burst_time + simulator.time, self.processInCPU.ID)
+	self.processInCPU.setInQueueTime(simulator.time)
         self.process_queue.preempt2queue(self.processInCPU.remain_burst_time, self.processInCPU) 
 #@TODO iant question! how about a process in content switching being preempted???
 

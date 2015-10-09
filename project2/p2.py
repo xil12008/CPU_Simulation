@@ -29,7 +29,7 @@ if(__name__=="__main__"):
              continue 
          segments = line.split('|')
          if(len(segments)!=5):
-             print "Wrong Input Line:", line 
+             #print "Wrong Input Line:", line 
              continue
          else:
              processList.append((int(segments[0]),\
@@ -44,18 +44,20 @@ if(__name__=="__main__"):
     for ptuple in processList:
         burst_num += ptuple[2]
 
+    outfile = open("simout.txt", "w")
     for qtype in queueTypeList: 
         cpu = CPU(queuetype=qtype)
         for ptuple in processList:
             cpu.addProcess(ProcessInfo(*ptuple)) 
         cpu.run()
-        print cpu.burstTimeSum, burst_num, cpu.waitTimeSum, cpu.waitTimeNum, cpu.turnaroundTimeSum, cpu.contentSwitchSum 
-        with open("simout.txt", "a") as outfile:
-            print "Algorithm %s", qtype
-            print "-- average CPU burst time: %.2f ms" % (1.0 * cpu.burstTimeSum/burst_num) 
-            print "-- average wait time: %.2f ms" %(1.0 * cpu.waitTimeSum/cpu.waitTimeNum) 
-            print "-- average  turnaround time: %.2f ms" % (1.0 * cpu.turnaroundTimeSum/cpu.n)
-            print "-- total number of context switches: %d" % cpu.contentSwitchSum 
+	print ""
+	print ""
+        outfile.write("Algorithm %s\n" % qtype)
+        outfile.write("-- average CPU burst time: %.2f ms\n" % (1.0 * cpu.burstTimeSum/burst_num))
+        outfile.write("-- average wait time: %.2f ms\n" %(1.0 * cpu.waitTimeSum/ burst_num)) 
+        outfile.write("-- average turnaround time: %.2f ms\n" % (1.0 * (cpu.burstTimeSum + 13*cpu.contentSwitchSum + cpu.waitTimeSum)/burst_num))
+        outfile.write("-- total number of context switches: %d\n" % cpu.contentSwitchSum)
+    outfile.close()
 
 
 
